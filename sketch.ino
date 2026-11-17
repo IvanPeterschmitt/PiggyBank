@@ -6,11 +6,11 @@
 #define EXITSERVO_PIN 3
 #define TOUCH_PIN 4
 
-Servo enteryServo;
+Servo entryServo;
 Servo exitServo;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 int sensorValue;
-float total;
+int total;
 
 const byte ROWS = 4; // Number of rows
 const byte COLS = 4; // Number of columns
@@ -24,16 +24,16 @@ byte rowPins[ROWS] = {5, 6, 7, 8};   // Connect to R1, R2, R3, R4
 byte colPins[COLS] = {9, 10, 11, 12};   // Connect to C1, C2, C3, C4
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-const float coinValues[9] = {0.01, 0.02, 0.05, 0.10, 0.20, 0, 0.50, 1.00, 2.00};
+const int coinValues[9] = {1, 2, 5, 10, 20, 0, 50, 100, 200};
 
 void setup() {
-    Serial.begin(9600);
+    // Serial.begin(9600);
 
-    lcd.init();                    // au lieu de lcd.begin(16, 2)
+    lcd.init();
     lcd.backlight();
 
-    enteryServo.attach(ENTRYSERVO_PIN);
-    enteryServo.write(90);
+    entryServo.attach(ENTRYSERVO_PIN);
+    entryServo.write(90);
     exitServo.attach(EXITSERVO_PIN);
     exitServo.write(90);
 
@@ -41,14 +41,14 @@ void setup() {
 
     printWelcome();
 
-    total = 0.0;
+    total = 0;
 }
 
 void loop() {
     char key = keypad.getKey();
     sensorValue = digitalRead(TOUCH_PIN);
 
-    if (sensorValue == 1) coinOn();
+    if (sensorValue == HIGH) coinOn();
 
     if (key == 'A') printTotal(0);
 
@@ -57,34 +57,34 @@ void loop() {
 
 void coinOn() {
 
-    float coinValue;
+    int coinValue;
 
     lcd.setCursor(0, 0);
     lcd.print("Coin detected   ");
     lcd.setCursor(0, 1);
     lcd.print("enter value     ");
 
-    while (sensorValue == 1) {
+    while (sensorValue == HIGH) {
         sensorValue = digitalRead(TOUCH_PIN);
 
         coinValue = enterValue();
 
         if (coinValue) {
-            total += coinValue;
 
             lcd.setCursor(0, 0);
             lcd.print("Coin registered ");
             lcd.setCursor(0, 1);
             lcd.print("                ");
             lcd.setCursor(0, 1);
-            lcd.print(coinValue);
+            printEuros(coinValue);
 
-            enteryServo.write(15);
-            while (sensorValue == 1) {
+            entryServo.write(15);
+            while (sensorValue == HIGH) {
                 sensorValue = digitalRead(TOUCH_PIN);
             }
-            enteryServo.write(90);
+            entryServo.write(90);
 
+            total += coinValue;
             delay(1000);
 
             printTotal(2000);
@@ -92,7 +92,7 @@ void coinOn() {
     }
 }
 
-float enterValue() {
+int enterValue() {
     delay(1000);
     int page = 0;
 
@@ -107,15 +107,17 @@ float enterValue() {
             key = keypad.getKey();
 
             sensorValue = digitalRead(TOUCH_PIN);
-            if (sensorValue != 1) return 0.0;
+            if (sensorValue != 1) return 0;
         }
+
+        if (key == 'B' || key == 'C' || key == 'D' || key == '#' || key == '*' || key == '0') key = '\0';
 
         if (key == '6') {
             if (page == 0) {
                 lcd.setCursor(0, 0);
                 lcd.print("  6:<-   7:50c  ");
                 lcd.setCursor(0, 1);
-                lcd.print(" 8:1eu    9:2eu ");
+                lcd.print(" 8:1eur   9:2eur");
             } else {
                 lcd.setCursor(0, 0);
                 lcd.print("1:1c  2:2c  3:5c");
@@ -127,7 +129,16 @@ float enterValue() {
         }
     }
 
-    if (key == 'A') return 0.0;
+    if (key == 'A') {
+        lcd.setCursor(0, 0);
+        lcd.print("Please remove   ");
+        lcd.setCursor(0, 1);
+        lcd.print("coin            ");
+        while (sensorValue == HIGH) {
+            sensorValue = digitalRead(TOUCH_PIN);
+        }
+        return 0;
+    }
     
     return coinValues[key-'0'-1];
 }
@@ -140,45 +151,49 @@ void retrieveCoins() {
     lcd.setCursor(0, 1);
     lcd.print("Please take cash");
 
-    char key;
+    char key = '\0';
     while (key != 'A') {
         key = keypad.getKey();
     }
 
-    total = 0.0;
+    total = 0;
     exitServo.write(90);
     printWelcome();
 }
 
-void printTotal(int timer) {
-    Serial.println(total);
+void printEuros(int cents) {
+    lcd.print(cents/100);
+    lcd.print(".");
+    int rest = cents%100;
+    if (rest < 10) lcd.print("0");
+    lcd.print(rest);
+    lcd.print(" eur");
+}
 
+void printTotal(int timer) {
+    
     if (timer) {
         lcd.setCursor(0, 0);
         lcd.print("Total:          ");
         lcd.setCursor(0, 1);
         lcd.print("                ");
         lcd.setCursor(0, 1);
-        lcd.print(total);
-        lcd.setCursor(6,1);
-        lcd.print("eur");
+        printEuros(total);
         
         delay(timer);
     }
 
     else {
-        char key; 
+        char key = '\0'; 
 
         lcd.setCursor(0, 0);
         lcd.print("Total:          ");
+        lcd.setCursor(11,0);
+        lcd.print("A:ret");
         lcd.setCursor(0, 1);
         lcd.print("                ");
         lcd.setCursor(0, 1);
-        lcd.print(total);
-        lcd.setCursor(6,1);
-        lcd.print("eur");
-        lcd.setCursor(11,0);
-        lcd.print("A:ret");
+        printEuros(total);
 
         while (key != 'A') {
             key = keypad.getKey();
